@@ -37,6 +37,8 @@ RegisterNUICallback("Eventhandler", function(passed, cb)
     elseif (event == "SetSoundVolume") then
         SetSoundVolume(data.name, data.volume)
         return cb("ok")
+    elseif (event == "GetPresets") then
+        return cb(GetPresets())
     end
 end)
 
@@ -51,6 +53,12 @@ AddEventHandler("onResourceStop", function(resource)
     for soundId, soundData in pairs(Cache.activeSounds) do
         if (soundData.invoker == resource) then
             StopSound(soundId)
+        end
+    end
+
+    for name, preset in pairs(Cache.presets) do
+        if (preset.invoker == resource) then
+            Cache.presets[name] = nil
         end
     end
 end)

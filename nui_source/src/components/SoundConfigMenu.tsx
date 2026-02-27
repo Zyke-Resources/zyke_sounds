@@ -2,11 +2,14 @@ import { memo, useMemo, useState } from "react";
 import { listen, send, callback } from "../utils/nui";
 import { useModalContext } from "../context/ModalContext";
 import { useTranslation } from "../context/Translation";
-import Modal from "./Modal";
-import Slider from "./Slider";
-import DebouncedTextInput from "./DebouncedTextInput";
+import Modal from "../utils/Modal";
+import Slider from "../utils/Slider";
+import DebouncedTextInput from "../utils/DebouncedTextInput";
+import DropDown, { DropDownItemType } from "../utils/DropDown";
+import IconButton from "../utils/IconButton";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import SearchIcon from "@mui/icons-material/Search";
+import FilterListIcon from "@mui/icons-material/FilterList";
 
 interface SoundEntry {
 	name: string;
@@ -17,18 +20,34 @@ const SoundRow = memo(({ name, initialVolume }: { name: string; initialVolume: n
 	const [volume, setVolume] = useState(initialVolume);
 
 	return (
-		<Slider
-			label={name}
-			displayLabel={`${volume.toFixed(2)}x`}
-			value={volume}
-			onChange={setVolume}
-			onChangeEnd={(val) => send("SetSoundVolume", { name, volume: val })}
-			min={0}
-			max={2}
-			step={0.05}
-		/>
+		<div style={{
+			borderRadius: "var(--borderRadius)",
+			background: "rgba(var(--dark2))",
+			border: `1px solid rgba(var(--grey2))`,
+			boxShadow: "0 0 3px 0 rgba(0, 0, 0, 0.3)",
+			padding: "0 0.5rem 0.5rem 0.5rem",
+		}}>
+			<Slider
+				label={name}
+				displayLabel={`${volume.toFixed(2)}x`}
+				value={volume}
+				onChange={setVolume}
+				onChangeEnd={(val) => send("SetSoundVolume", { name, volume: val })}
+				min={0}
+				max={2}
+				step={0.05}
+				rootStyle={{
+					padding: "0",
+				}}
+			/>
+		</div>
 	);
 });
+
+interface PresetData {
+	invoker: string;
+	sounds: string[];
+}
 
 const SoundConfigMenu = () => {
 	const T = useTranslation();
@@ -36,25 +55,54 @@ const SoundConfigMenu = () => {
 	const [sounds, setSounds] = useState<SoundEntry[]>([]);
 	const [loadingSounds, setLoadingSounds] = useState(false);
 	const [search, setSearch] = useState("");
+	const [presets, setPresets] = useState<Record<string, PresetData>>({});
+	const [activePreset, setActivePreset] = useState<string | null>(null);
+	const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
+
+	const presetNames = useMemo(() => Object.keys(presets), [presets]);
+
+	const presetDropdownItems: DropDownItemType[] = useMemo(() => {
+		return presetNames.map((name) => ({
+			label: name,
+			name: name,
+			radioButton: activePreset === name,
+			onClick: () => {
+				setActivePreset((prev) => (prev === name ? null : name));
+			},
+		}));
+	}, [presetNames, activePreset]);
 
 	const filteredSounds = useMemo(() => {
-		if (!search) return sounds;
+		let result = sounds;
 
-		const lower = search.toLowerCase();
-		return sounds.filter((s) => s.name.toLowerCase().includes(lower));
-	}, [sounds, search]);
+		if (activePreset && presets[activePreset]) {
+			const allowed = new Set(presets[activePreset].sounds);
+			result = result.filter((s) => allowed.has(s.name));
+		}
+
+		if (search) {
+			const lower = search.toLowerCase();
+			result = result.filter((s) => s.name.toLowerCase().includes(lower));
+		}
+
+		return result;
+	}, [sounds, search, activePreset, presets]);
 
 	listen("SetOpen", async (val: boolean) => {
 		if (val) {
 			setSearch("");
+			setActivePreset(null);
+			setPresetDropdownOpen(false);
 			setLoadingSounds(true);
 			openModal("soundConfig");
 
 			const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-			const sounds = callback("GetSoundsList");
+			const soundsPromise = callback("GetSoundsList");
+			const presetsPromise = callback("GetPresets");
 
 			await delay(200);
-			setSounds(await sounds as SoundEntry[]);
+			setSounds((await soundsPromise) as SoundEntry[]);
+			setPresets((await presetsPromise) as Record<string, PresetData>);
 			setLoadingSounds(false);
 		} else {
 			closeModal("soundConfig");
@@ -73,28 +121,53 @@ const SoundConfigMenu = () => {
 				width: "50rem",
 			}}
 		>
-			<DebouncedTextInput
-				value={search}
-				onChange={setSearch}
-				placeholder={T("searchSounds")}
-				icon={<SearchIcon />}
-				style={{ width: "100%", marginBottom: "0.5rem" }}
-				delay={100}
-			/>
+			<div
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: "0.5rem",
+					marginBottom: "0.5rem",
+				}}
+			>
+				<DebouncedTextInput
+					value={search}
+					onChange={setSearch}
+					placeholder={T("searchSounds")}
+					icon={<SearchIcon />}
+					sx={{ flex: 1 }}
+					delay={100}
+				/>
+				{presetNames.length > 0 && (
+					<DropDown
+						open={presetDropdownOpen}
+						setOpen={setPresetDropdownOpen}
+						items={presetDropdownItems}
+						position="bottom-right"
+						styling={{
+							minWidth: "16rem",
+						}}
+					>
+						<IconButton
+							onClick={() => setPresetDropdownOpen((prev) => !prev)}
+							color={activePreset ? "var(--blue1)" : undefined}
+						>
+							<FilterListIcon />
+						</IconButton>
+					</DropDown>
+				)}
+			</div>
 			<div
 				style={{
 					maxHeight: "60vh",
 					overflowY: "auto",
 					overflowX: "hidden",
-					paddingRight: "0.5rem",
 				}}
 			>
 				<div
 					style={{
 						display: "flex",
 						flexDirection: "column",
-						gap: "0.2rem",
-						padding: "0 0 1.5rem 0",
+						gap: "0.75rem",
 					}}
 				>
 					{filteredSounds.length === 0 ? (

@@ -1,6 +1,27 @@
 Cache = {}
 Cache.activeSounds = {}
-Cache.soundVolumes = {} -- Per-sound volume multipliers (0.0-2.0)
+
+---@type table<string, number> Per-sound volume multipliers (0.0-2.0)
+Cache.soundVolumes = {}
+
+---@type table<string, { invoker: string, sounds: string[] }>
+Cache.presets = {}
+
+---@param name string @ Preset display name (ex. "Consumables" or "Consumables (Eating)")
+---@param sounds string[] @ List of sound file names (ex. {"x.ogg", "y.ogg"})
+function AddPreset(name, sounds)
+    Cache.presets[name] = {
+        invoker = GetInvokingResource() or "unknown",
+        sounds = sounds,
+    }
+end
+
+exports("AddPreset", AddPreset)
+
+---@return table<string, { invoker: string, sounds: string[] }>
+function GetPresets()
+    return Cache.presets
+end
 
 -- Load our old config, which is {[key: string]: number} JSON encoded
 local storedJson = GetResourceKvpString(Config.Settings.kvpKey)
