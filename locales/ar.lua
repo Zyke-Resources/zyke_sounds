@@ -4,4 +4,5 @@ return {
     ["searchSounds"] = "البحث عن الأصوات...",
     ["noSoundsFound"] = "لم يتم العثور على أصوات",
     ["soundCount"] = "%s صوت (أصوات)",
+    ["filterPresets"] = "تصفية",
 }

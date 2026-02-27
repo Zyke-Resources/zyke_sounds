@@ -4,4 +4,5 @@ return {
     ["searchSounds"] = "Sesleri ara...",
     ["noSoundsFound"] = "Ses bulunamadı",
     ["soundCount"] = "%s ses",
+    ["filterPresets"] = "Filtre",
 }

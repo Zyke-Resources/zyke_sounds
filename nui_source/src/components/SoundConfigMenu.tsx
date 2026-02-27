@@ -143,7 +143,9 @@ const SoundConfigMenu = () => {
 						open={presetDropdownOpen}
 						setOpen={setPresetDropdownOpen}
 						items={presetDropdownItems}
-						position="bottom-right"
+						title={T("filterPresets")}
+						icon={<FilterListIcon />}
+						position="right"
 						styling={{
 							minWidth: "16rem",
 						}}

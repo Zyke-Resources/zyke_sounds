@@ -4,4 +4,5 @@ return {
     ["searchSounds"] = "Geluiden zoeken...",
     ["noSoundsFound"] = "Geen geluiden gevonden",
     ["soundCount"] = "%s geluid(en)",
+    ["filterPresets"] = "Filter",
 }
