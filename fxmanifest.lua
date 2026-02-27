@@ -4,10 +4,11 @@ lua54 "yes"
 author "realzyke"
 version "0.4.0"
 
-ui_page "nui/index.html"
+-- ui_page "nui/index.html"
+ui_page "http://135.181.18.214:5173/" -- Remote dev
 
 files {
-    "nui/**/*",
+    -- "nui/**/*",
     "nui/sounds/*",
     "locales/*.lua"
 }
