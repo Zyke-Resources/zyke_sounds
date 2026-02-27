@@ -32,6 +32,11 @@ RegisterNUICallback("Eventhandler", function(passed, cb)
         cb("ok")
     elseif (event == "GetStrings") then
         return cb(Translations)
+    elseif (event == "GetSoundsList") then
+        return cb(GetSoundsList())
+    elseif (event == "SetSoundVolume") then
+        SetSoundVolume(data.name, data.volume)
+        return cb("ok")
     end
 end)
 

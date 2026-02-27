@@ -158,6 +158,8 @@ exports("DoesSoundExist", function(soundName)
 end)
 
 ---@return table<string, boolean> @file name, exists
-exports("GetLoadedSounds", function()
+function GetLoadedSounds()
     return loadedSounds
-end)
+end
+
+exports("GetLoadedSounds", GetLoadedSounds)

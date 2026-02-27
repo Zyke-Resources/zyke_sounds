@@ -27,7 +27,11 @@ end
 ---@param plyPos vector3
 ---@param soundData SoundData | SoundDataWithLocation | SoundDataWithEntity
 function GetSoundVolume(plyPos, soundData)
-    if (soundData.soundType == "default") then return soundData.maxVolume end
+    local multiplier = GetVolumeMultiplier(soundData.soundName)
+
+    if (soundData.soundType == "default") then
+        return math.min(1.0, soundData.maxVolume * multiplier)
+    end
 
     if (soundData.soundType == "location") then
         local dst = #(plyPos - soundData.location)
@@ -39,7 +43,7 @@ function GetSoundVolume(plyPos, soundData)
 
         if (dst > maxDst) then return 0.0 end
 
-        return soundData.maxVolume * (1.0 - (dst / maxDst))
+        return math.min(1.0, soundData.maxVolume * (1.0 - (dst / maxDst)) * multiplier)
     elseif (soundData.soundType == "entity") then
         if (not NetworkDoesNetworkIdExist(soundData.entityNetId)) then return 0.0 end
 
@@ -55,7 +59,7 @@ function GetSoundVolume(plyPos, soundData)
 
         if (dst > maxDst) then return 0.0 end
 
-        return soundData.maxVolume * (1.0 - (dst / maxDst))
+        return math.min(1.0, soundData.maxVolume * (1.0 - (dst / maxDst)) * multiplier)
     end
 end
 
