@@ -134,7 +134,7 @@ const Modal: React.FC<ModalProps> = ({
 				onClickOutside={onClickOutside}
 				idx={idx.current - 1}
 			/>
-			<Loading open={open} loading={loading ? true : false} />
+			<Loading open={open} loading={loading ? true : false} idx={idx.current} />
 			<AnimatePresence onExitComplete={onExited}>
 				{open && !loading && (
 					<motion.div
@@ -458,7 +458,7 @@ const BackDrop: React.FC<BackDropProps> = ({
 	);
 };
 
-const Loading = ({ open, loading }: { open: boolean; loading: boolean }) => {
+const Loading = ({ open, loading, idx }: { open: boolean; loading: boolean, idx: number }) => {
 	return (
 		<AnimatePresence>
 			{open && loading && (
@@ -473,7 +473,7 @@ const Loading = ({ open, loading }: { open: boolean; loading: boolean }) => {
 						left: "50%",
 						translateX: "-50%",
 						translateY: "-50%",
-						zIndex: 1000,
+						zIndex: idx,
 					}}
 				>
 					<CircularProgress />
