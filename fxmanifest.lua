@@ -27,7 +27,6 @@ client_scripts {
 }
 
 server_scripts {
-    "server/main.lua",
     "server/functions.lua",
     "server/eventhandler.lua"
 }
