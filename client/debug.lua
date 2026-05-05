@@ -1,5 +1,6 @@
 if (not Config.Settings.debug) then return end
 
+-- Draws debug markers for active location and entity sounds.
 CreateThread(function()
     while (true) do
         for _, soundData in pairs(Cache.activeSounds) do

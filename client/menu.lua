@@ -1,3 +1,4 @@
+-- Opens the sound configuration menu.
 RegisterCommand(Config.Settings.commandName, function()
     SendNUIMessage({
         event = "SetOpen",

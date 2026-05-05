@@ -1,9 +1,14 @@
 Cache = {}
+
+-- Locally cached sounds keyed by sound id. Location sounds arrive from server snapshots/events,
+-- while entity sounds arrive from state bags. Muted entity sounds stay cached so volume reacts immediately.
 Cache.activeSounds = {}
 
----@type table<string, number> Per-sound volume multipliers (0.0-2.0)
+-- Per-sound user volume multipliers (0.0-2.0), persisted in resource KVP.
+---@type table<string, number>
 Cache.soundVolumes = {}
 
+-- Sound picker presets registered by other resources for the config menu.
 ---@type table<string, { invoker: string, sounds: string[] }>
 Cache.presets = {}
 
@@ -23,12 +28,13 @@ function GetPresets()
     return Cache.presets
 end
 
--- Load our old config, which is {[key: string]: number} JSON encoded
+-- Load persisted per-sound volume multipliers.
 local storedJson = GetResourceKvpString(Config.Settings.kvpKey)
 if (storedJson) then
     Cache.soundVolumes = json.decode(storedJson) or {}
 end
 
+-- Persists client sound volume multipliers to KVP storage.
 local function saveSoundVolumes()
     SetResourceKvp(Config.Settings.kvpKey, json.encode(Cache.soundVolumes))
 end
@@ -42,20 +48,18 @@ function SetSoundVolume(soundName, value)
     saveSoundVolumes()
 end
 
---- Get the volume multiplier for a given soundName (string or string[])
+-- Returns the volume multiplier for the requested sound.
 ---@param soundName string | string[]
 ---@return number
 function GetVolumeMultiplier(soundName)
     if (type(soundName) == "table") then
-        -- For random-pick sounds, use the first entry's multiplier as representative
-        -- Weird side-effect, should randomly grab the sound on the server instead
         soundName = soundName[1]
     end
 
     return Cache.soundVolumes[soundName] or 1.0
 end
 
---- Returns a list of all sound files with their current volume multipliers
+-- Returns all sound files with their current volume multipliers.
 ---@return table[]
 function GetSoundsList()
     local soundNames = Z.callback.request("zyke_sounds:GetSoundNames", nil)

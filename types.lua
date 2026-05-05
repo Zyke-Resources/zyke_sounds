@@ -1,34 +1,121 @@
----@class SoundData
----@field soundId string
----@field soundType string @default
----@field soundName string
----@field maxVolume number
----@field looped boolean
-
 ---@class SoundDataWithEntity
----@field soundType string @entity
----@field soundName string | string[] @Sound name or list of sound names
+---@field soundId string
+---@field soundType "entity"
+---@field soundName string @ Selected sound name
 ---@field maxVolume number
 ---@field maxDistance number
 ---@field entityNetId integer
----@field looped boolean | number | {[1]: number, [2]: number} @Basic looping, loop with time between, loop with random time between
----@field playCount integer? @If not looping, you can decide how many times the audio will play
----@field invoker string @Script that invoked the sound
+---@field looped boolean @ NUI playback loop state
+---@field playCount? integer @ If not looping, you can decide how many times the audio will play
+---@field invoker string @ Script that invoked the sound
+---@field iteration integer
+---@field offsetMs integer
+---@field reportEvents? boolean
+---@field ownerServerId? integer
+---@field stateBagManaged? boolean
+---@field stateBagName? string
+---@field missingEntitySince? integer
 
 ---@class SoundDataWithLocation
 ---@field soundId string
----@field soundType string @location
----@field soundName string | string[] @Sound name or list of sound names
+---@field soundType "location"
+---@field soundName string @ Selected sound name
 ---@field maxVolume number
 ---@field maxDistance number
 ---@field location vector3
----@field looped boolean | number | {[1]: number, [2]: number} @Basic looping, loop with time between, loop with random time between
----@field playCount integer? @If not looping, you can decide how many times the audio will play
----@field invoker string @Script that invoked the sound
+---@field looped boolean @ NUI playback loop state
+---@field playCount? integer @ If not looping, you can decide how many times the audio will play
+---@field invoker string @ Script that invoked the sound
+---@field iteration integer
+---@field offsetMs integer
+---@field reportEvents? boolean
 
 ---@class NUISoundData
 ---@field soundId string
----@field soundName string | string[] @Sound name or list of sound names
----@field volume number @0.0-1.0
----@field looped? boolean | number | {[1]: number, [2]: number} @Basic looping, loop with time between, loop with random time between
----@field playCount? number @How many times to play the sound
+---@field soundName string @ Selected sound name
+---@field volume number @ 0.0-1.0
+---@field looped? boolean @ Native audio loop state
+---@field iteration? integer @ Server-selected playback iteration
+---@field offsetMs? integer @ Current offset for late join and bucket sync
+---@field reportEvents? boolean @ Whether NUI should forward metadata/end events to the server
+
+---@class NUISoundEventData
+---@field soundId string
+---@field soundName string
+---@field iteration integer
+---@field durationMs integer
+---@field failed? boolean @ Playback could not load or start
+---@field reportEvents? boolean @ Whether this client was selected as the server reporter
+
+---@class StateBagSoundPayload
+---@field seq integer
+---@field soundId string
+---@field soundType "entity"
+---@field soundName string
+---@field maxVolume number
+---@field maxDistance number
+---@field startedAt integer
+---@field expiresAt integer
+---@field ttlMs integer
+---@field ownerServerId? integer
+---@field invoker string
+
+---@class StateBagActiveSoundPayload
+---@field soundId string
+---@field soundType "entity"
+---@field soundName string
+---@field maxVolume number
+---@field maxDistance number
+---@field looped boolean
+---@field invoker string
+---@field iteration integer
+---@field offsetMs integer
+---@field ownerServerId? integer
+---@field stateBagManaged? boolean
+
+---@class StateBagStopSoundPayload
+---@field soundId string
+---@field stopped boolean
+---@field stopSeq integer
+---@field fade? number
+---@field forceFull? boolean
+---@field expiresAt integer
+
+---@class ServerStateBagOneShotData
+---@field state table
+---@field stateKey string
+---@field seq integer
+
+---@class ServerSoundOptions
+---@field soundName string | string[] @ Sound name or list of names selected server-side
+---@field id? string @ Only needed if you want to manually stop the sound
+---@field maxVolume? number
+---@field maxDistance? number
+---@field looped? boolean | number | {[1]: number, [2]: number} @ Basic looping, loop with time between, loop with random time between
+---@field playCount? integer @ If not looping, you can decide how many times the audio will play
+---@field routingBucket? integer @ Target routing bucket for location sounds
+---@field global? boolean @ Play location sounds in all routing buckets
+
+---@class ServerSoundData : ServerSoundOptions
+---@field soundId string
+---@field soundType "entity" | "location"
+---@field sourceSoundName string | string[] @ Original sound request
+---@field soundName? string @ Selected active sound
+---@field maxDistance number
+---@field location? vector3
+---@field entity? integer
+---@field entityNetId? integer
+---@field playerId? integer
+---@field remainingPlays? integer
+---@field invoker string
+---@field iteration integer
+---@field startedAt integer
+---@field waitingUntil? integer
+---@field handledIteration? integer
+---@field scheduledIteration? integer
+---@field scheduledFallback? boolean
+---@field scheduledEndAt? integer
+---@field scheduleToken? integer
+---@field reporterPlayerId? integer
+---@field activeStateBagEntity? integer
+---@field activeStateBagPlayerId? integer
