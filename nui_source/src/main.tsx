@@ -34,6 +34,18 @@ interface AudioEntry {
 const audios: Record<string, AudioEntry> = {};
 const Funcs: FuncMap = {};
 
+const getSoundUrl = (soundName: string) => {
+	// Server-side validation should already provide a safe relative sound name
+	// The browser still encodes each path segment before creating the URL
+	const segments = soundName.replace(/\\/g, "/").split("/");
+
+	if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+		return null;
+	}
+
+	return `sounds/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
+};
+
 window.addEventListener("message", (e: MessageEvent) => {
 	const event = e.data.event as string;
 	const data = e.data.data;
@@ -57,7 +69,13 @@ Funcs.PlaySound = (soundData: SoundData) => {
 		delete audios[soundData.soundId];
 	}
 
-	const audio = new Audio(`sounds/${soundData.soundName}`);
+	const soundUrl = getSoundUrl(soundData.soundName);
+	if (!soundUrl) {
+		console.error("Rejected unsafe sound path:", soundData.soundName);
+		return;
+	}
+
+	const audio = new Audio(soundUrl);
 	const iteration = soundData.iteration ?? 0;
 	const shouldReportEvents = soundData.reportEvents === true;
 

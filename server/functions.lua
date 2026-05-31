@@ -31,10 +31,16 @@ local soundIdCounter = 0
 local stateBagEmitSeq = 0
 local stateBagStopSeq = 0
 local activeEntityStateKey = "zyke_sounds:active"
-local soundsPath = GetResourcePath(GetCurrentResourceName()) .. "/nui/sounds/"
 
 ---@type table<string, boolean> @ File name, exists
 local loadedSounds = {}
+
+-- Full relative sound names are authoritative, for example vehicles/vehicle_lock
+-- The alias maps below keep old flat calls like vehicle_lock working when
+-- the filename is unique across the library
+local soundNameAliases = {}
+local ambiguousSoundNames = {}
+local resolveSoundName
 
 ---@return string
 function GetDefaultSoundId()
@@ -89,9 +95,9 @@ end
 ---@return string | string[] | nil
 local function getValidSoundNames(soundName)
     if (type(soundName) == "string") then
-        if (loadedSounds[soundName]) then return soundName end
-
-        return nil
+        -- Resolve here so all server play entrypoints support both new nested
+        -- names and legacy flat names before the selected name reaches clients
+        return resolveSoundName(soundName)
     end
 
     if (type(soundName) ~= "table") then return nil end
@@ -100,9 +106,9 @@ local function getValidSoundNames(soundName)
     local addedSoundNames = {}
 
     for i = 1, #soundName do
-        local name = soundName[i]
+        local name = resolveSoundName(soundName[i])
 
-        if (type(name) == "string" and loadedSounds[name] and not addedSoundNames[name]) then
+        if (name and not addedSoundNames[name]) then
             validSoundNames[#validSoundNames + 1] = name
             addedSoundNames[name] = true
         end
@@ -1192,72 +1198,217 @@ CreateThread(function()
     end
 end)
 
--- Validates a sound file name against the NUI sound folder.
+---@param soundName string
+---@return string?
+local function normalizeSoundName(soundName)
+    if (type(soundName) ~= "string" or soundName == "") then return nil end
+
+    -- Internally we only store URL-style relative paths
+    -- This lets Windows paths from config/user input resolve like Linux paths
+    soundName = soundName:gsub("\\", "/")
+
+    -- Reject absolute paths, empty path segments, null/control characters, and
+    -- traversal attempts before any value is used for resource-file lookup
+    if (
+        soundName:sub(1, 1) == "/"
+        or soundName:sub(-1) == "/"
+        or soundName:find("//", 1, true)
+        or soundName:find("%z")
+        or soundName:find("[\1-\31]")
+    ) then
+        return nil
+    end
+
+    local lowerSoundName = soundName:lower()
+    if (
+        lowerSoundName:match("%.mp3$") == nil
+        and lowerSoundName:match("%.ogg$") == nil
+        and lowerSoundName:match("%.wav$") == nil
+    ) then
+        return nil
+    end
+
+    local normalizedSegments = {}
+
+    for segment in soundName:gmatch("[^/]+") do
+        if (segment == "." or segment == "..") then return nil end
+
+        normalizedSegments[#normalizedSegments + 1] = segment
+    end
+
+    if (#normalizedSegments == 0) then return nil end
+
+    return table.concat(normalizedSegments, "/")
+end
+
+---@param fileName string
+---@return string?
+local function getSoundBaseName(fileName)
+    return fileName:match("([^/]+)$")
+end
+
+---@param duplicatesByName table<string, string[]>
+local function warnDuplicateSoundNames(duplicatesByName)
+    if (Config.Settings.warnDuplicateSoundNames == false) then return end
+
+    -- Duplicate basenames are allowed for organization, but they intentionally
+    -- disable flat-name compatibility because a flat filename would be ambiguous
+    local warnings = {}
+
+    for _, paths in pairs(duplicatesByName) do
+        if (#paths > 1) then
+            table.sort(paths)
+            warnings[#warnings + 1] = paths
+        end
+    end
+
+    if (#warnings == 0) then return end
+
+    table.sort(warnings, function(a, b)
+        return a[1] < b[1]
+    end)
+
+    local maxWarnings = math.max(1, tonumber(Config.Settings.maxDuplicateSoundWarnings) or 20)
+    local warningCount = math.min(#warnings, maxWarnings)
+
+    for i = 1, warningCount do
+        print("^3[WARNING] Duplicate Zyke Sounds file name detected: " .. table.concat(warnings[i], ", ") .. ". The legacy flat-name alias is disabled; use the full relative path when playing this sound.^7")
+    end
+
+    if (#warnings > maxWarnings) then
+        print("^3[WARNING] " .. (#warnings - maxWarnings) .. " additional duplicate Zyke Sounds file-name groups were skipped.^7")
+    end
+end
+
+local duplicateSounds = {}
+local loadedSoundNames = {}
+
+---@param soundName string
+---@return boolean
+local function doesResourceSoundExist(soundName)
+    return LoadResourceFile(GetCurrentResourceName(), "nui/sounds/" .. soundName) ~= nil
+end
+
+---@param soundName string
+local function registerLoadedSound(soundName)
+    soundName = normalizeSoundName(soundName)
+    if (not soundName) then return end
+    if (loadedSounds[soundName]) then return end
+
+    loadedSounds[soundName] = true
+    loadedSoundNames[#loadedSoundNames + 1] = soundName
+
+    local baseName = getSoundBaseName(soundName)
+    if (baseName) then
+        local duplicateKey = baseName:lower()
+        duplicateSounds[duplicateKey] = duplicateSounds[duplicateKey] or {}
+        duplicateSounds[duplicateKey][#duplicateSounds[duplicateKey] + 1] = soundName
+
+        -- Build exactly one flat-name alias per basename
+        -- Once a second path
+        -- with the same basename appears, the alias is removed and future calls
+        -- must use the full nested path
+        if (soundNameAliases[duplicateKey] and soundNameAliases[duplicateKey] ~= soundName) then
+            soundNameAliases[duplicateKey] = nil
+            ambiguousSoundNames[duplicateKey] = true
+        elseif (not ambiguousSoundNames[duplicateKey]) then
+            soundNameAliases[duplicateKey] = soundName
+        end
+    end
+end
+
+---@return boolean
+---@return string?
+local function loadDiscoveredSounds()
+    -- The scanner runs in JS because it has reliable recursive filesystem APIs
+    -- Users only need to add sounds under nui/sounds and restart the resource
+    local loaded, discoveredSounds = pcall(function()
+        return exports[GetCurrentResourceName()]:GetDiscoveredSounds()
+    end)
+
+    if (not loaded or type(discoveredSounds) ~= "table") then
+        return false, "Could not read discovered sounds from server/sound_scanner.js."
+    end
+
+    for i = 1, #discoveredSounds do
+        registerLoadedSound(discoveredSounds[i])
+    end
+
+    return true, nil
+end
+
+local soundsDiscovered, discoveryError = loadDiscoveredSounds()
+table.sort(loadedSoundNames)
+
+---@param soundName string
+---@return string?
+resolveSoundName = function(soundName)
+    local normalizedSoundName = normalizeSoundName(soundName)
+    if (not normalizedSoundName) then return nil end
+
+    -- Full relative paths always win
+    -- Flat aliases are only a compatibility fallback for old integrations
+    if (loadedSounds[normalizedSoundName]) then return normalizedSoundName end
+    if (normalizedSoundName:find("/", 1, true)) then return nil end
+
+    return soundNameAliases[normalizedSoundName:lower()]
+end
+
+-- Validates a sound file path against the NUI sound folder
 ---@param fileName string
 ---@return boolean
 function DoesFileExist(fileName)
-    if (type(fileName) ~= "string" or fileName == "") then return false end
-    if (fileName:find("%.%.") or fileName:find("[/\\]")) then return false end
+    local normalizedFileName = resolveSoundName(fileName)
+    if (not normalizedFileName) then return false end
 
-    local lowerFileName = fileName:lower()
-    if (
-        not lowerFileName:match("%.mp3$")
-        and not lowerFileName:match("%.ogg$")
-        and not lowerFileName:match("%.wav$")
-    ) then
-        return false
-    end
-
-    local file = io.open(soundsPath .. fileName, "r")
-    if (file) then
-        file:close()
-
-        return true
-    end
-
-    return false
+    -- Use FiveM's resource loader instead of raw filesystem access so this
+    -- behaves consistently in packaged and deployed resources
+    return doesResourceSoundExist(normalizedFileName)
 end
 
 exports("DoesFileExist", DoesFileExist)
 
-local isWindows = os.getenv("OS") == "Windows"
-local command
-if (isWindows) then
-    command = 'dir "' .. soundsPath .. '" /b'
-else
-    command = 'ls "' .. soundsPath .. '"'
-end
+local function logLoadedSounds()
+    if (Config.Settings.debug ~= true) then return end
 
----@param soundName string
----@return boolean
-local function isValidSoundName(soundName)
-    if (type(soundName) ~= "string" or soundName == "") then return false end
-
-    local lowerSoundName = soundName:lower()
-
-    return lowerSoundName:match("%.mp3$") ~= nil or lowerSoundName:match("%.ogg$") ~= nil or lowerSoundName:match("%.wav$") ~= nil
-end
-
-local debugEnabled = Config.Settings.debug
-local commandPipe = io.popen(command)
-if (commandPipe) then
-    for file in commandPipe:lines() do
-        if (isValidSoundName(file)) then
-            loadedSounds[file] = true
-
-            if (debugEnabled) then
-                print("^4[DEBUG] ^2Registered " .. file .. " as loaded sound.^7")
-            end
-        end
+    if (not soundsDiscovered and discoveryError) then
+        print("^4[DEBUG] ^1" .. discoveryError .. "^7")
     end
 
-    commandPipe:close()
+    if (#loadedSoundNames == 0) then
+        print("^4[DEBUG] ^1No Zyke Sounds files were discovered under nui/sounds.^7")
+
+        return
+    end
+
+    print("^4[DEBUG] ^2Registered " .. #loadedSoundNames .. " Zyke Sounds files.^7")
+
+    for i = 1, #loadedSoundNames do
+        print("^4[DEBUG] ^2Registered " .. loadedSoundNames[i] .. " as loaded sound.^7")
+    end
+
+    local aliasCount = 0
+    for _ in pairs(soundNameAliases) do
+        aliasCount = aliasCount + 1
+    end
+
+    print("^4[DEBUG] ^2Registered " .. aliasCount .. " legacy flat sound aliases.^7")
 end
+
+CreateThread(function()
+    Wait(0)
+    logLoadedSounds()
+end)
+
+warnDuplicateSoundNames(duplicateSounds)
 
 ---@param soundName string
 ---@return boolean
 function DoesSoundExist(soundName)
-    return loadedSounds[soundName] ~= nil
+    local normalizedSoundName = resolveSoundName(soundName)
+    if (not normalizedSoundName) then return false end
+
+    return loadedSounds[normalizedSoundName] ~= nil
 end
 
 exports("DoesSoundExist", DoesSoundExist)

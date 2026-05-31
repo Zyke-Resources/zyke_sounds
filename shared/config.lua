@@ -6,6 +6,12 @@ Config.Settings = {
     -- Shows debug markers for sound positions and logs loaded sound files.
     debug = false,
 
+    -- Warns when multiple sounds share the same file name in different folders.
+    warnDuplicateSoundNames = true,
+
+    -- Limits duplicate-name warning spam when large sound libraries are loaded.
+    maxDuplicateSoundWarnings = 20,
+
     -- How often clients update active sound volume by distance. Lower is smoother, higher is cheaper.
     -- Can drastically affect performance if changed too much, only change if you know what you're doing.
     volumeUpdateInterval = 100,

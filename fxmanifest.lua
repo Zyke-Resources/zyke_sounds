@@ -1,14 +1,14 @@
 fx_version "cerulean"
 game "gta5"
 lua54 "yes"
-author "realzyke"
+author "https://discord.zykeresources.com"
 version "0.5.0"
 
 ui_page "nui/index.html"
 
 files {
     "nui/**/*",
-    "nui/sounds/*",
+    "nui/sounds/**/*",
     "locales/*.lua"
 }
 
@@ -27,6 +27,7 @@ client_scripts {
 }
 
 server_scripts {
+    "server/sound_scanner.js",
     "server/functions.lua",
     "server/eventhandler.lua"
 }
