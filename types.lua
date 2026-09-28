@@ -30,10 +30,18 @@
 ---@field offsetMs integer
 ---@field reportEvents? boolean
 
+---@class NUISpatialData
+---@field x number @ Direction to the sound in listener space, +X right
+---@field y number @ +Y up
+---@field z number @ -Z ahead of the camera
+---@field gain number @ Occlusion volume multiplier, 1.0 when unobstructed
+---@field lowpass? number @ Low-pass cutoff in Hz from rear muffling and occlusion, nil when untouched
+
 ---@class NUISoundData
 ---@field soundId string
 ---@field soundName string @ Selected sound name
 ---@field volume number @ 0.0-1.0
+---@field spatial? NUISpatialData @ nil plays the sound centred
 ---@field looped? boolean @ Native audio loop state
 ---@field iteration? integer @ Server-selected playback iteration
 ---@field offsetMs? integer @ Current offset for late join and bucket sync

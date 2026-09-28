@@ -1,5 +1,9 @@
 local volumeUpdateInterval = math.max(10, tonumber(Config.Settings.volumeUpdateInterval) or 100)
 local isUpdatingVolume = false
+local spatialSettings = Config.Settings.spatialAudio or {}
+local occlusionSettings = spatialSettings.occlusion or {}
+-- Low-pass cutoff in Hz that leaves a sound untouched
+local openLowpass = 22000.0
 
 ---@param bagName? string
 ---@return integer?
@@ -89,6 +93,85 @@ function GetSoundVolume(playerPos, soundData)
     end
 end
 
+---@param a vector3
+---@param b vector3
+---@return number
+local function dot(a, b)
+    return a.x * b.x + a.y * b.y + a.z * b.z
+end
+
+---@param soundData SoundDataWithLocation | SoundDataWithEntity
+---@return vector3? position
+---@return integer? entity
+local function getSoundSourcePosition(soundData)
+    if (soundData.soundType == "location") then return soundData.location end
+    if (not soundData.entityNetId or not NetworkDoesNetworkIdExist(soundData.entityNetId)) then return nil end
+
+    local entity = NetworkGetEntityFromNetworkId(soundData.entityNetId)
+    if (not entity or entity == 0 or not DoesEntityExist(entity)) then return nil end
+
+    return GetEntityCoords(entity), entity
+end
+
+-- Only world geometry counts, so the vehicle or ped carrying the sound never muffles it
+---@param from vector3
+---@param to vector3
+---@param entity? integer
+---@return boolean occluded
+local function isSoundOccluded(from, to, entity)
+    local handle = StartExpensiveSynchronousShapeTestLosProbe(from.x, from.y, from.z, to.x, to.y, to.z + 0.3, 1, entity or 0, 7)
+    local _, hit = GetShapeTestResult(handle)
+
+    return hit == 1
+end
+
+-- Direction from the camera to the sound in Web Audio's listener space (+X right, +Y up, -Z ahead),
+-- plus how muffled it is. nil keeps the sound centred, as for sounds on the player's own ped.
+-- Left/right panning can not tell ahead from behind, so sounds behind are muffled like a head shadow
+---@param soundData SoundDataWithLocation | SoundDataWithEntity
+---@param volume number
+---@return NUISpatialData? spatial
+local function getSoundSpatial(soundData, volume)
+    if (spatialSettings.enabled ~= true) then return nil end
+
+    local sourcePos, entity = getSoundSourcePosition(soundData)
+    if (not sourcePos or entity == PlayerPedId()) then return nil end
+
+    local camPos = GetFinalRenderedCamCoord()
+    local offset = sourcePos - camPos
+    local distance = #offset
+    if (distance < 0.5) then return nil end
+
+    local camRot = GetFinalRenderedCamRot(2)
+    local pitch, yaw = math.rad(camRot.x), math.rad(camRot.z)
+    local forward = vector3(-math.sin(yaw) * math.cos(pitch), math.cos(yaw) * math.cos(pitch), math.sin(pitch))
+    local right = vector3(math.cos(yaw), math.sin(yaw), 0.0)
+    local up = vector3(right.y * forward.z - right.z * forward.y, right.z * forward.x - right.x * forward.z, right.x * forward.y - right.y * forward.x)
+    local direction = offset / distance
+
+    ---@type NUISpatialData
+    local spatial = {
+        x = dot(direction, right),
+        y = dot(direction, up),
+        z = -dot(direction, forward),
+        gain = 1.0,
+    }
+
+    local rearLowpass = tonumber(spatialSettings.rearLowpass)
+    if (rearLowpass and spatial.z > 0.0) then
+        -- Eases from open straight to the side down to rearLowpass directly behind
+        spatial.lowpass = openLowpass * (math.max(100.0, rearLowpass) / openLowpass) ^ spatial.z
+    end
+
+    -- Silent sounds skip the ray, it is the only costly part
+    if (occlusionSettings.enabled == true and volume > 0.0 and isSoundOccluded(camPos, sourcePos, entity)) then
+        spatial.gain = math.max(0.0, math.min(1.0, tonumber(occlusionSettings.volume) or 0.6))
+        spatial.lowpass = math.min(spatial.lowpass or openLowpass, math.max(100.0, tonumber(occlusionSettings.lowpass) or 1000.0))
+    end
+
+    return spatial
+end
+
 ---@param soundData SoundDataWithLocation | SoundDataWithEntity
 ---@return boolean
 function PlaySoundData(soundData)
@@ -125,6 +208,7 @@ function PlaySoundData(soundData)
         soundId = soundData.soundId,
         soundName = soundData.soundName,
         volume = volume,
+        spatial = getSoundSpatial(soundData, volume),
         looped = soundData.looped == true,
         iteration = soundData.iteration,
         offsetMs = soundData.offsetMs or 0,
@@ -168,7 +252,8 @@ function UpdateSoundVolume(soundId)
         event = "UpdateSoundVolume",
         data = {
             soundId = soundId,
-            volume = volume or 0.0
+            volume = volume or 0.0,
+            spatial = getSoundSpatial(soundData, volume or 0.0)
         }
     })
 end

@@ -16,6 +16,22 @@ Config.Settings = {
     -- Can drastically affect performance if changed too much, only change if you know what you're doing.
     volumeUpdateInterval = 100,
 
+    -- Plays world sounds from where they are, following the camera, instead of straight into both ears
+    spatialAudio = {
+        enabled = true,
+        -- Low-pass cutoff in Hz for a sound directly behind the camera, so behind sounds duller
+        -- than ahead; false turns the rear muffling off
+        rearLowpass = 4000,
+        -- Sounds behind walls and buildings come through quieter and muffled
+        occlusion = {
+            enabled = true,
+            -- Volume multiplier while occluded
+            volume = 0.6,
+            -- Low-pass cutoff in Hz while occluded, lower is more muffled
+            lowpass = 1000,
+        },
+    },
+
     -- Command players use to open the sound volume menu.
     commandName = "sounds",
 

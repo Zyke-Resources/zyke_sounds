@@ -12,10 +12,19 @@ if (rootEl) {
 	ReactDOM.createRoot(rootEl).render(<App />);
 }
 
+interface SpatialData {
+	x: number;
+	y: number;
+	z: number;
+	gain: number;
+	lowpass?: number;
+}
+
 interface SoundData {
 	soundId: string;
 	soundName: string;
 	volume: number;
+	spatial?: SpatialData | null;
 	looped?: boolean;
 	iteration?: number;
 	offsetMs?: number;
@@ -26,13 +35,130 @@ interface FuncMap {
 	[event: string]: (data: any) => void;
 }
 
+interface SpatialNodes {
+	source: MediaElementAudioSourceNode;
+	level: GainNode;
+	filter: BiquadFilterNode;
+	gain: GainNode;
+	panner: PannerNode;
+}
+
 interface AudioEntry {
 	audio: HTMLAudioElement;
 	iteration: number;
+	nodes: SpatialNodes | null;
 }
 
 const audios: Record<string, AudioEntry> = {};
 const Funcs: FuncMap = {};
+
+// Seconds for direction and muffling to glide to each new value between Lua updates
+const spatialSmoothing = 0.06;
+// Volume glides too; stepping it every Lua update clicks audibly on pure tones
+const volumeSmoothing = 0.05;
+const openLowpass = 22000;
+
+let audioContext: AudioContext | null = null;
+
+// One shared context; sounds fall back to plain playback if Web Audio is unavailable
+const getAudioContext = () => {
+	if (!audioContext) {
+		try {
+			audioContext = new AudioContext();
+		} catch (err) {
+			console.error("Web Audio unavailable, sounds will play without direction:", err);
+			return null;
+		}
+	}
+
+	if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
+
+	return audioContext;
+};
+
+// The element keeps loading, looping and events; the graph owns volume, muffling and direction
+const createSpatialNodes = (audio: HTMLAudioElement): SpatialNodes | null => {
+	const ctx = getAudioContext();
+	if (!ctx) return null;
+
+	try {
+		const source = ctx.createMediaElementSource(audio);
+		const level = ctx.createGain();
+		const filter = ctx.createBiquadFilter();
+		const gain = ctx.createGain();
+		const panner = ctx.createPanner();
+
+		filter.type = "lowpass";
+		filter.frequency.value = openLowpass;
+
+		// Lua already scales volume by distance, so the panner only places the sound. HRTF swaps
+		// convolution kernels as the direction changes and crackles, equal-power pans cleanly
+		panner.panningModel = "equalpower";
+		panner.distanceModel = "linear";
+		panner.rolloffFactor = 0;
+		panner.positionZ.value = -1;
+
+		source.connect(level).connect(filter).connect(gain).connect(panner).connect(ctx.destination);
+
+		return { source, level, filter, gain, panner };
+	} catch (err) {
+		console.error("Failed to create spatial audio nodes:", err);
+		return null;
+	}
+};
+
+const applySpatial = (entry: AudioEntry, spatial?: SpatialData | null) => {
+	const nodes = entry.nodes;
+	if (!nodes || !audioContext) return;
+
+	const now = audioContext.currentTime;
+	const { filter, gain, panner } = nodes;
+
+	// No spatial data means centred and unmuffled, like the player's own sounds
+	const x = spatial ? spatial.x : 0;
+	const y = spatial ? spatial.y : 0;
+	const z = spatial ? spatial.z : -1;
+
+	panner.positionX.setTargetAtTime(x, now, spatialSmoothing);
+	panner.positionY.setTargetAtTime(y, now, spatialSmoothing);
+	panner.positionZ.setTargetAtTime(z, now, spatialSmoothing);
+	gain.gain.setTargetAtTime(spatial ? spatial.gain : 1, now, spatialSmoothing * 2);
+	filter.frequency.setTargetAtTime(spatial?.lowpass ?? openLowpass, now, spatialSmoothing * 2);
+};
+
+// A connected element stays referenced by the graph, so every finished sound must be detached
+const releaseNodes = (entry: AudioEntry) => {
+	if (!entry.nodes) return;
+
+	try {
+		entry.nodes.source.disconnect();
+		entry.nodes.panner.disconnect();
+	} catch (err) {
+		console.error("Failed to release spatial audio nodes:", err);
+	}
+
+	entry.nodes = null;
+};
+
+// Plain elements fall back to the stepped element volume
+const setEntryVolume = (entry: AudioEntry, volume: number, immediate = false) => {
+	if (!entry.nodes || !audioContext) {
+		entry.audio.volume = volume;
+		return;
+	}
+
+	const level = entry.nodes.level.gain;
+	if (immediate) {
+		level.value = volume;
+		return;
+	}
+
+	level.setTargetAtTime(volume, audioContext.currentTime, volumeSmoothing);
+};
+
+const releaseWhenEnded = (entry: AudioEntry) => {
+	entry.audio.addEventListener("ended", () => releaseNodes(entry), { once: true });
+};
 
 const getSoundUrl = (soundName: string) => {
 	// Server-side validation should already provide a safe relative sound name
@@ -66,6 +192,7 @@ Funcs.PlaySound = (soundData: SoundData) => {
 	if (existingEntry) {
 		existingEntry.audio.pause();
 		unregisterAudioEvents(existingEntry.audio);
+		releaseNodes(existingEntry);
 		delete audios[soundData.soundId];
 	}
 
@@ -79,13 +206,17 @@ Funcs.PlaySound = (soundData: SoundData) => {
 	const iteration = soundData.iteration ?? 0;
 	const shouldReportEvents = soundData.reportEvents === true;
 
-	audio.volume = soundData.volume;
 	audio.loop = soundData.looped === true ? true : false;
 
-	audios[soundData.soundId] = {
+	const newEntry: AudioEntry = {
 		audio,
 		iteration,
+		nodes: createSpatialNodes(audio),
 	};
+
+	audios[soundData.soundId] = newEntry;
+	setEntryVolume(newEntry, soundData.volume, true);
+	applySpatial(newEntry, soundData.spatial);
 
 	let hasStarted = false;
 	let hasSentMetadata = false;
@@ -110,6 +241,7 @@ Funcs.PlaySound = (soundData: SoundData) => {
 
 		clearFallbackTimer();
 		unregisterAudioEvents(audio);
+		releaseNodes(entry);
 		delete audios[soundData.soundId];
 	};
 
@@ -236,6 +368,7 @@ Funcs.StopSound = ({
 		if (forceFull) {
 			audio.loop = false;
 			unregisterAudioEvents(audio);
+			releaseWhenEnded(entry);
 			delete audios[soundId];
 
 			return;
@@ -245,6 +378,7 @@ Funcs.StopSound = ({
 		if (fade == 0) {
 			audio.pause();
 			unregisterAudioEvents(audio);
+			releaseNodes(entry);
 			delete audios[soundId];
 			return;
 		}
@@ -253,6 +387,23 @@ Funcs.StopSound = ({
 		// Then, slowly fade the audio out
 		unregisterAudioEvents(audio);
 		delete audios[soundId];
+
+		// Graph sounds ramp their gain smoothly instead of stepping the element volume
+		if (entry.nodes && audioContext) {
+			const level = entry.nodes.level.gain;
+			const now = audioContext.currentTime;
+
+			level.cancelScheduledValues(now);
+			level.setValueAtTime(level.value, now);
+			level.linearRampToValueAtTime(0, now + fade / 1000);
+
+			setTimeout(() => {
+				audio.pause();
+				releaseNodes(entry);
+			}, fade);
+
+			return;
+		}
 
 		const orgVolume = audio.volume;
 		const interval = 20;
@@ -265,6 +416,7 @@ Funcs.StopSound = ({
 			if (currStep >= steps) {
 				clearInterval(fadeInterval);
 				audio.pause();
+				releaseNodes(entry);
 				return;
 			}
 
@@ -282,17 +434,19 @@ Funcs.StopSound = ({
 			if (audios[soundId]) {
 				audios[soundId].audio.pause();
 				unregisterAudioEvents(audios[soundId].audio);
+				releaseNodes(audios[soundId]);
 				delete audios[soundId];
 			}
 		});
 	}
 };
 
-Funcs.UpdateSoundVolume = (soundData: { soundId: string; volume: number }) => {
+Funcs.UpdateSoundVolume = (soundData: { soundId: string; volume: number; spatial?: SpatialData | null }) => {
 	const entry = audios[soundData.soundId];
 	if (!entry) return;
 
-	entry.audio.volume = soundData.volume;
+	setEntryVolume(entry, soundData.volume);
+	applySpatial(entry, soundData.spatial);
 };
 
 // Helper to send NUI events back to Lua (used by sound logic)
