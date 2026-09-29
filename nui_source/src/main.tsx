@@ -107,7 +107,8 @@ const createSpatialNodes = (audio: HTMLAudioElement): SpatialNodes | null => {
 	}
 };
 
-const applySpatial = (entry: AudioEntry, spatial?: SpatialData | null) => {
+// New sounds start at their values, gliding there from open would play the first moment unmuffled
+const applySpatial = (entry: AudioEntry, spatial?: SpatialData | null, immediate = false) => {
 	const nodes = entry.nodes;
 	if (!nodes || !audioContext) return;
 
@@ -118,6 +119,15 @@ const applySpatial = (entry: AudioEntry, spatial?: SpatialData | null) => {
 	const x = spatial ? spatial.x : 0;
 	const y = spatial ? spatial.y : 0;
 	const z = spatial ? spatial.z : -1;
+
+	if (immediate) {
+		panner.positionX.value = x;
+		panner.positionY.value = y;
+		panner.positionZ.value = z;
+		gain.gain.value = spatial ? spatial.gain : 1;
+		filter.frequency.value = spatial?.lowpass ?? openLowpass;
+		return;
+	}
 
 	panner.positionX.setTargetAtTime(x, now, spatialSmoothing);
 	panner.positionY.setTargetAtTime(y, now, spatialSmoothing);
@@ -216,7 +226,7 @@ Funcs.PlaySound = (soundData: SoundData) => {
 
 	audios[soundData.soundId] = newEntry;
 	setEntryVolume(newEntry, soundData.volume, true);
-	applySpatial(newEntry, soundData.spatial);
+	applySpatial(newEntry, soundData.spatial, true);
 
 	let hasStarted = false;
 	let hasSentMetadata = false;

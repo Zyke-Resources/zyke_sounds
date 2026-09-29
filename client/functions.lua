@@ -2,6 +2,7 @@ local volumeUpdateInterval = math.max(10, tonumber(Config.Settings.volumeUpdateI
 local isUpdatingVolume = false
 local spatialSettings = Config.Settings.spatialAudio or {}
 local occlusionSettings = spatialSettings.occlusion or {}
+local vehicleSettings = spatialSettings.vehicle or {}
 -- Low-pass cutoff in Hz that leaves a sound untouched
 local openLowpass = 22000.0
 
@@ -125,6 +126,29 @@ local function isSoundOccluded(from, to, entity)
     return hit == 1
 end
 
+-- Vehicle classes without a cabin: motorcycles, cycles and boats
+local openVehicleClasses = {[8] = true, [13] = true, [14] = true}
+
+-- Open vehicles and lowered convertible roofs let sounds through untouched
+---@param vehicle integer
+---@return boolean
+local function isVehicleClosed(vehicle)
+    if (openVehicleClasses[GetVehicleClass(vehicle)]) then return false end
+    if (IsVehicleAConvertible(vehicle, false) and GetConvertibleRoofState(vehicle) ~= 0) then return false end
+
+    return true
+end
+
+-- Only peds count, sounds on the vehicle itself (engine bay, flatbed hydraulics) are outside the cabin
+---@param entity? integer
+---@param vehicle integer
+---@return boolean
+local function isInsideVehicle(entity, vehicle)
+    if (not entity or not IsEntityAPed(entity)) then return false end
+
+    return GetVehiclePedIsIn(entity, false) == vehicle
+end
+
 -- Direction from the camera to the sound in Web Audio's listener space (+X right, +Y up, -Z ahead),
 -- plus how muffled it is. nil keeps the sound centred, as for sounds on the player's own ped.
 -- Left/right panning can not tell ahead from behind, so sounds behind are muffled like a head shadow
@@ -134,8 +158,12 @@ end
 local function getSoundSpatial(soundData, volume)
     if (spatialSettings.enabled ~= true) then return nil end
 
+    local ped = PlayerPedId()
     local sourcePos, entity = getSoundSourcePosition(soundData)
-    if (not sourcePos or entity == PlayerPedId()) then return nil end
+    if (not sourcePos or entity == ped) then return nil end
+
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    local sharesVehicle = vehicle ~= 0 and isInsideVehicle(entity, vehicle)
 
     local camPos = GetFinalRenderedCamCoord()
     local offset = sourcePos - camPos
@@ -163,10 +191,19 @@ local function getSoundSpatial(soundData, volume)
         spatial.lowpass = openLowpass * (math.max(100.0, rearLowpass) / openLowpass) ^ spatial.z
     end
 
-    -- Silent sounds skip the ray, it is the only costly part
-    if (occlusionSettings.enabled == true and volume > 0.0 and isSoundOccluded(camPos, sourcePos, entity)) then
-        spatial.gain = math.max(0.0, math.min(1.0, tonumber(occlusionSettings.volume) or 0.6))
-        spatial.lowpass = math.min(spatial.lowpass or openLowpass, math.max(100.0, tonumber(occlusionSettings.lowpass) or 1000.0))
+    -- Inside a vehicle the cabin muffles everything outside it evenly, so the ray is skipped.
+    -- Sounds within the same vehicle skip the ray too, as it would hit the vehicle itself
+    local muffle
+    if (vehicle ~= 0 and not sharesVehicle and vehicleSettings.enabled == true and isVehicleClosed(vehicle)) then
+        muffle = vehicleSettings
+    elseif (not sharesVehicle and occlusionSettings.enabled == true and volume > 0.0 and isSoundOccluded(camPos, sourcePos, entity)) then
+        -- Silent sounds skip the ray, it is the only costly part
+        muffle = occlusionSettings
+    end
+
+    if (muffle) then
+        spatial.gain = math.max(0.0, math.min(1.0, tonumber(muffle.volume) or 0.6))
+        spatial.lowpass = math.min(spatial.lowpass or openLowpass, math.max(100.0, tonumber(muffle.lowpass) or 1000.0))
     end
 
     return spatial

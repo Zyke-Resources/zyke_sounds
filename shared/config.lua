@@ -30,6 +30,16 @@ Config.Settings = {
             -- Low-pass cutoff in Hz while occluded, lower is more muffled
             lowpass = 1000,
         },
+        -- While inside a closed vehicle, sounds from outside it come through quieter and muffled.
+        -- Replaces the wall check, and sounds from anyone seated in the same vehicle stay clear.
+        -- Sounds on the vehicle itself count as outside. Motorcycles, cycles, boats and lowered convertibles are skipped
+        vehicle = {
+            enabled = true,
+            -- Volume multiplier for sounds outside the vehicle
+            volume = 0.5,
+            -- Low-pass cutoff in Hz for sounds outside the vehicle, lower is more muffled
+            lowpass = 800,
+        },
     },
 
     -- Command players use to open the sound volume menu.
