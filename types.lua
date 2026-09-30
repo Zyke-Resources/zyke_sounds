@@ -15,6 +15,7 @@
 ---@field stateBagManaged? boolean
 ---@field stateBagName? string
 ---@field missingEntitySince? integer
+---@field occlusionIgnore? string @ Key of the client-registered entities this sound is not muffled by
 
 ---@class SoundDataWithLocation
 ---@field soundId string
@@ -29,6 +30,7 @@
 ---@field iteration integer
 ---@field offsetMs integer
 ---@field reportEvents? boolean
+---@field occlusionIgnore? string @ Key of the client-registered entities this sound is not muffled by
 
 ---@class NUISpatialData
 ---@field x number @ Direction to the sound in listener space, +X right
@@ -67,6 +69,7 @@
 ---@field ttlMs integer
 ---@field ownerServerId? integer
 ---@field invoker string
+---@field occlusionIgnore? string
 
 ---@class StateBagActiveSoundPayload
 ---@field soundId string
@@ -80,6 +83,7 @@
 ---@field offsetMs integer
 ---@field ownerServerId? integer
 ---@field stateBagManaged? boolean
+---@field occlusionIgnore? string
 
 ---@class StateBagStopSoundPayload
 ---@field soundId string
@@ -103,6 +107,7 @@
 ---@field playCount? integer @ If not looping, you can decide how many times the audio will play
 ---@field routingBucket? integer @ Target routing bucket for location sounds
 ---@field global? boolean @ Play location sounds in all routing buckets
+---@field occlusionIgnore? string @ Not muffled by the entities each client registers under this key with SetOcclusionIgnore
 
 ---@class ServerSoundData : ServerSoundOptions
 ---@field soundId string

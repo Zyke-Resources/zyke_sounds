@@ -114,16 +114,34 @@ local function getSoundSourcePosition(soundData)
     return GetEntityCoords(entity), entity
 end
 
--- Only world geometry counts, so the vehicle or ped carrying the sound never muffles it
+-- Rays per check at most, one plus each ignored entity it may pass through
+local maxOcclusionRays = 4
+
+-- Only world geometry counts, so the vehicle or ped carrying the sound never muffles it.
+-- Ignored entities cost another ray only when one is actually in the way, carrying on from where it was hit
 ---@param from vector3
 ---@param to vector3
 ---@param entity? integer
+---@param ignored? table<integer, true> @ Entities this sound passes through
 ---@return boolean occluded
-local function isSoundOccluded(from, to, entity)
-    local handle = StartExpensiveSynchronousShapeTestLosProbe(from.x, from.y, from.z, to.x, to.y, to.z + 0.3, 1, entity or 0, 7)
-    local _, hit = GetShapeTestResult(handle)
+local function isSoundOccluded(from, to, entity, ignored)
+    to = vector3(to.x, to.y, to.z + 0.3)
+    local direction = norm(to - from)
+    local skip = entity or 0
 
-    return hit == 1
+    for _ = 1, maxOcclusionRays do
+        local handle = StartExpensiveSynchronousShapeTestLosProbe(from.x, from.y, from.z, to.x, to.y, to.z, 1, skip, 7)
+        local _, hit, hitPos, _, hitEntity = GetShapeTestResult(handle)
+        if (hit ~= 1) then return false end
+        if (hitEntity ~= entity and not (ignored and ignored[hitEntity])) then return true end
+
+        -- The probe skips one entity, so the next one starts past this hit instead of at the camera
+        skip = hitEntity
+        from = hitPos + direction * 0.01
+    end
+
+    -- Everything hit so far was ignored
+    return false
 end
 
 -- Vehicle classes without a cabin: motorcycles, cycles and boats
@@ -194,9 +212,10 @@ local function getSoundSpatial(soundData, volume)
     -- Inside a vehicle the cabin muffles everything outside it evenly, so the ray is skipped.
     -- Sounds within the same vehicle skip the ray too, as it would hit the vehicle itself
     local muffle
+    local ignore = soundData.occlusionIgnore and Cache.occlusionIgnores[soundData.occlusionIgnore]
     if (vehicle ~= 0 and not sharesVehicle and vehicleSettings.enabled == true and isVehicleClosed(vehicle)) then
         muffle = vehicleSettings
-    elseif (not sharesVehicle and occlusionSettings.enabled == true and volume > 0.0 and isSoundOccluded(camPos, sourcePos, entity)) then
+    elseif (not sharesVehicle and occlusionSettings.enabled == true and volume > 0.0 and isSoundOccluded(camPos, sourcePos, entity, ignore and ignore.entities)) then
         -- Silent sounds skip the ray, it is the only costly part
         muffle = occlusionSettings
     end

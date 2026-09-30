@@ -160,7 +160,8 @@ local function handleStateBagEntitySound(bagName, payload)
             invoker = payload.invoker,
             iteration = payload.seq,
             offsetMs = 0,
-            reportEvents = false
+            reportEvents = false,
+            occlusionIgnore = payload.occlusionIgnore
         })
     end)
 end
@@ -224,7 +225,8 @@ local function handleActiveEntitySounds(bagName, payloads)
                         offsetMs = tonumber(payload.offsetMs) or 0,
                         reportEvents = ownerServerId == nil or ownerServerId == GetPlayerServerId(PlayerId()),
                         stateBagManaged = true,
-                        stateBagName = bagName
+                        stateBagName = bagName,
+                        occlusionIgnore = payload.occlusionIgnore
                     })
                 end
             end
@@ -310,5 +312,12 @@ AddEventHandler("onResourceStop", function(resource)
 
     for i = 1, #presetNames do
         Cache.presets[presetNames[i]] = nil
+    end
+
+    -- Their entities are gone or about to be, and a reused handle must not stay ignored
+    for key, ignore in pairs(Cache.occlusionIgnores) do
+        if (ignore.invoker == resource) then
+            Cache.occlusionIgnores[key] = nil
+        end
     end
 end)

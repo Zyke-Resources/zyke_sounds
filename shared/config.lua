@@ -22,7 +22,8 @@ Config.Settings = {
         -- Low-pass cutoff in Hz for a sound directly behind the camera, so behind sounds duller
         -- than ahead; false turns the rear muffling off
         rearLowpass = 4000,
-        -- Sounds behind walls and buildings come through quieter and muffled
+        -- Sounds behind walls and buildings come through quieter and muffled. Sounds played with an
+        -- occlusionIgnore key pass through the entities clients register under it with SetOcclusionIgnore
         occlusion = {
             enabled = true,
             -- Volume multiplier while occluded

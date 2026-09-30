@@ -308,7 +308,8 @@ local function getClientSoundData(soundData)
         iteration = soundData.iteration,
         offsetMs = offsetMs,
         ownerServerId = tonumber(soundData.playerId),
-        reportEvents = false
+        reportEvents = false,
+        occlusionIgnore = soundData.occlusionIgnore
     }
 end
 
@@ -764,7 +765,8 @@ local function tryEmitStateBagEntitySound(options)
         expiresAt = startedAt + math.ceil(ttlMs / 1000),
         ttlMs = ttlMs,
         ownerServerId = playerId or tonumber(options.playerId),
-        invoker = GetInvokingResource() or GetCurrentResourceName()
+        invoker = GetInvokingResource() or GetCurrentResourceName(),
+        occlusionIgnore = type(options.occlusionIgnore) == "string" and options.occlusionIgnore or nil
     }, true)
 
     Cache.stateBagOneShots[soundId] = {
@@ -829,6 +831,7 @@ local function registerSound(options)
         remainingPlays = remainingPlays,
         routingBucket = options.routingBucket or 0,
         global = options.global == true,
+        occlusionIgnore = type(options.occlusionIgnore) == "string" and options.occlusionIgnore or nil,
         invoker = GetInvokingResource() or GetCurrentResourceName(),
         iteration = 0,
         startedAt = 0
