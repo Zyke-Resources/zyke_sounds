@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { callback } from "../utils/nui";
+import { callback, listen } from "../utils/nui";
 
 const TranslationContext = createContext<
 	(key: string, formatting?: Array<string>) => string
@@ -40,6 +40,9 @@ export const TranslationProvider: React.FC<{ children: React.ReactNode }> = ({
 			setStrings(res);
 		});
 	}, []);
+
+	// zyke_lib sends the new strings when the player changes language
+	listen("zyke_lib:strings", (res: TranslationStrings) => setStrings(res));
 
 	return strings ? (
 		<TranslationContext.Provider value={T}>

@@ -17,6 +17,9 @@ zyke_systems {
     "framework",
 }
 
+-- Shows each player the language they picked, see zyke_lib's README
+zyke_player_language "yes"
+
 shared_script "@zyke_lib/imports.lua"
 
 shared_scripts {
