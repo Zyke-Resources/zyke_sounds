@@ -12,6 +12,11 @@ files {
     "locales/*.lua"
 }
 
+-- zyke_lib systems this resource uses, zyke_lib only waits for these while it starts
+zyke_systems {
+    "framework",
+}
+
 shared_script "@zyke_lib/imports.lua"
 
 shared_scripts {
