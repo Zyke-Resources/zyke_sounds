@@ -24,6 +24,7 @@
 ---@field maxVolume number
 ---@field maxDistance number
 ---@field location vector3
+---@field interior? integer @ Interior the sound is in, looked up on the client, 0 outdoors
 ---@field looped boolean @ NUI playback loop state
 ---@field playCount? integer @ If not looping, you can decide how many times the audio will play
 ---@field invoker string @ Script that invoked the sound

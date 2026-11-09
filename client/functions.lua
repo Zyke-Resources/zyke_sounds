@@ -144,6 +144,32 @@ local function isSoundOccluded(from, to, entity, ignored)
     return false
 end
 
+---@param soundData SoundDataWithLocation | SoundDataWithEntity
+---@param entity? integer
+---@return integer interior @ 0 outdoors
+local function getSoundInterior(soundData, entity)
+    if (entity) then return GetInteriorFromEntity(entity) end
+
+    -- A location sound stays where it is, so its interior is looked up once it is known
+    if (not soundData.interior or soundData.interior == 0) then
+        soundData.interior = GetInteriorAtCoords(soundData.location.x, soundData.location.y, soundData.location.z)
+    end
+
+    return soundData.interior
+end
+
+-- A sound inside a building is muffled for a listener outside it and the other way round, whatever the wall
+-- check says: its ray sees through windows and open doorways, which made the same sound flip between clear and muffled
+---@param soundData SoundDataWithLocation | SoundDataWithEntity
+---@param entity? integer
+---@param ped integer
+---@return boolean isSeparated
+local function isInOtherInterior(soundData, entity, ped)
+    if (occlusionSettings.interiors ~= true) then return false end
+
+    return getSoundInterior(soundData, entity) ~= GetInteriorFromEntity(ped)
+end
+
 -- Vehicle classes without a cabin: motorcycles, cycles and boats
 local openVehicleClasses = {[8] = true, [13] = true, [14] = true}
 
@@ -215,7 +241,12 @@ local function getSoundSpatial(soundData, volume)
     local ignore = soundData.occlusionIgnore and Cache.occlusionIgnores[soundData.occlusionIgnore]
     if (vehicle ~= 0 and not sharesVehicle and vehicleSettings.enabled == true and isVehicleClosed(vehicle)) then
         muffle = vehicleSettings
-    elseif (not sharesVehicle and occlusionSettings.enabled == true and volume > 0.0 and isSoundOccluded(camPos, sourcePos, entity, ignore and ignore.entities)) then
+    elseif (
+        not sharesVehicle
+        and occlusionSettings.enabled == true
+        and volume > 0.0
+        and (isInOtherInterior(soundData, entity, ped) or isSoundOccluded(camPos, sourcePos, entity, ignore and ignore.entities))
+    ) then
         -- Silent sounds skip the ray, it is the only costly part
         muffle = occlusionSettings
     end

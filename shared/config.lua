@@ -30,6 +30,9 @@ Config.Settings = {
             volume = 0.6,
             -- Low-pass cutoff in Hz while occluded, lower is more muffled
             lowpass = 1000,
+            -- Sounds inside a building are always muffled for players outside it, and the other way round,
+            -- also through windows and open doors
+            interiors = true,
         },
         -- While inside a closed vehicle, sounds from outside it come through quieter and muffled.
         -- Replaces the wall check, and sounds from anyone seated in the same vehicle stay clear.
