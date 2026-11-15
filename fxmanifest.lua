@@ -2,7 +2,7 @@ fx_version "cerulean"
 game "gta5"
 lua54 "yes"
 author "https://discord.zykeresources.com"
-version "0.7.4"
+version "0.7.5"
 
 ui_page "nui/index.html"
 
